@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Planilha Interativa</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      position: relative;
+    }
+    th:hover .col-controls,
+    td:first-child:hover .row-controls {
+      display: inline-flex;
+    }
+    .col-controls, .row-controls {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      display: none;
+      gap: 5px;
+    }
+    .icon-btn {
+      cursor: pointer;
+      background: #eee;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 14px;
+    }
+    .hidden {
+      display: none;
+    }
+    .edit-btn, .save-btn {
+      cursor: pointer;
+    }
+    .add-planilha {
+      margin-top: 10px;
+      display: inline-block;
+      background-color: #007bff;
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Planilha 1</h2>
+<div id="planilha1-container"></div>
+<div class="add-planilha" onclick="mostrarProximaPlanilha()">+ Adicionar próxima planilha</div>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbx3OQZ9bUx0CrNjRfq00M5HjMAOhskQ4GWREvYOc1eCsSEchEpHtvc8sUAVuZ9Q70zXqg/exec';
+
+let colunasVisiveis = 2;
+
+function carregarPlanilha1() {
+  fetch(`${scriptUrl}?action=list&section=1`)
+    .then(res => res.json())
+    .then(json => renderizarTabela(json.headers, json.data));
+}
+
+function renderizarTabela(headers, dados) {
+  const container = document.getElementById('planilha1-container');
+  container.innerHTML = '';
+
+  const tabela = document.createElement('table');
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+
+  headers.forEach((header, i) => {
+    const th = document.createElement('th');
+    th.classList.add(`col-${i}`);
+    if (i >= colunasVisiveis) th.classList.add('hidden');
+
+    const span = document.createElement('span');
+    span.textContent = header;
+    span.contentEditable = false;
+    span.classList.add('header-text');
+
+    const editBtn = document.createElement('span');
+    editBtn.textContent = '??';
+    editBtn.className = 'icon-btn edit-btn';
+    editBtn.onclick = () => {
+      span.contentEditable = true;
+      span.focus();
+      editBtn.style.display = 'none';
+      saveBtn.style.display = 'inline';
+    };
+
+    const saveBtn = document.createElement('span');
+    saveBtn.textContent = '??';
+    saveBtn.className = 'icon-btn save-btn';
+    saveBtn.style.display = 'none';
+    saveBtn.onclick = () => {
+      span.contentEditable = false;
+      editBtn.style.display = 'inline';
+      saveBtn.style.display = 'none';
+      salvarCabecalho();
+    };
+
+    const controls = document.createElement('div');
+    controls.className = 'col-controls';
+
+    if (i === colunasVisiveis - 1 && i < headers.length - 1) {
+      const plus = document.createElement('span');
+      plus.textContent = '+';
+      plus.className = 'icon-btn';
+      plus.onclick = () => {
+        colunasVisiveis++;
+        renderizarTabela(headers, dados);
+      };
+      controls.appendChild(plus);
+    }
+
+    if (i === colunasVisiveis - 1 && i > 1) {
+      const minus = document.createElement('span');
+      minus.textContent = '-';
+      minus.className = 'icon-btn';
+      minus.onclick = () => {
+        limparColuna(i, dados);
+        colunasVisiveis--;
+        renderizarTabela(headers, dados);
+      };
+      controls.appendChild(minus);
+    }
+
+    controls.appendChild(editBtn);
+    controls.appendChild(saveBtn);
+    th.appendChild(span);
+    th.appendChild(controls);
+    trHead.appendChild(th);
+  });
+
+  thead.appendChild(trHead);
+  tabela.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  dados.forEach((item, rowIndex) => {
+    const tr = document.createElement('tr');
+    headers.forEach((header, colIndex) => {
+      const td = document.createElement('td');
+      td.classList.add(`col-${colIndex}`);
+      if (colIndex >= colunasVisiveis) td.classList.add('hidden');
+
+      const span = document.createElement('span');
+      span.textContent = item[header];
+      span.contentEditable = false;
+
+      td.appendChild(span);
+
+      if (colIndex === 0) {
+        const controls = document.createElement('div');
+        controls.className = 'row-controls';
+
+        const edit = document.createElement('span');
+        edit.textContent = '??';
+        edit.className = 'icon-btn';
+        edit.onclick = () => {
+          [...tr.children].forEach(cell => {
+            cell.children[0].contentEditable = true;
+          });
+          edit.style.display = 'none';
+          save.style.display = 'inline';
+        };
+
+        const save = document.createElement('span');
+        save.textContent = '??';
+        save.className = 'icon-btn';
+        save.style.display = 'none';
+        save.onclick = () => {
+          const updated = {};
+          headers.forEach((h, i) => {
+            updated[h] = tr.children[i].children[0].textContent.trim();
+          });
+          fetch(scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'edit', ...updated }),
+            headers: { 'Content-Type': 'application/json' }
+          }).then(() => carregarPlanilha1());
+        };
+
+        controls.appendChild(edit);
+        controls.appendChild(save);
+        td.appendChild(controls);
+      }
+
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  tabela.appendChild(tbody);
+  container.appendChild(tabela);
+}
+
+function limparColuna(index, dados) {
+  dados.forEach(item => {
+    item[Object.keys(item)[index]] = "";
+  });
+}
+
+function salvarCabecalho() {
+  const headers = [];
+  document.querySelectorAll('thead th .header-text').forEach(span => {
+    headers.push(span.textContent.trim());
+  });
+  fetch(scriptUrl, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'saveHeader', headers }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+function mostrarProximaPlanilha() {
+  alert("Em breve: Planilha 2 será carregada aqui!");
+}
+
+carregarPlanilha1();
+</script>
+</body>
+</html>
